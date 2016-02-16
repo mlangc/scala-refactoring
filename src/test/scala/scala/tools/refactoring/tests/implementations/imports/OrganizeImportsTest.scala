@@ -29,6 +29,12 @@ class OrganizeImportsTest extends OrganizeImportsBaseTest {
   private def organizeCustomized(
       groupPkgs: List[String] = List("java", "scala", "org", "com"),
       useWildcards: Set[String] = Set("scalaz", "scalaz.Scalaz"),
+      expandImports: Boolean = true,
+      simplifyWildcards: Boolean = false,
+      sortImports: Boolean = true,
+      sortImportSelectors: Boolean = false,
+      collapseImports: Boolean = false,
+      removeDuplicates: Boolean = false,
       dependencies: Dependencies.Value = Dependencies.FullyRecompute)(pro: FileSet) = new OrganizeImportsRefatoring(pro) {
     val params = {
       val groupImports = refactoring.GroupImports(groupPkgs)
@@ -36,12 +42,15 @@ class OrganizeImportsTest extends OrganizeImportsBaseTest {
 
       new refactoring.RefactoringParameters(
           options =
-            refactoring.ExpandImports ::
+            (if (expandImports) List(refactoring.ExpandImports) else Nil) :::
+            (if (simplifyWildcards) List(refactoring.SimplifyWildcards) else Nil) :::
             refactoring.PrependScalaPackage ::
             alwaysUseWildcards ::
-            refactoring.SortImports ::
-            groupImports ::
-            Nil,
+            (if (sortImports) List(refactoring.SortImports) else Nil) :::
+            (if (sortImportSelectors) List(refactoring.SortImportSelectors) else Nil) :::
+            (if (collapseImports) List(refactoring.CollapseImports) else Nil) :::
+            (if (removeDuplicates) List(refactoring.RemoveDuplicates) else Nil) :::
+            groupImports :: Nil,
           deps = dependencies)
     }
   }.mkChanges
@@ -1927,4 +1936,64 @@ class OrganizeImportsTest extends OrganizeImportsBaseTest {
     """
     }
   } applyRefactoring organizeWithTypicalParams
+
+  @Test
+  def testForEnsimePr1289Ex1() = new FileSet {
+    """
+    /*<-*/
+    package test
+
+    import scala._
+    import java.lang.Integer
+    import scala.Int
+    import java._
+
+    trait Temp {
+      def i(): Int
+      def j(): Integer
+    }
+    """ becomes
+    """
+    /*<-*/
+    package test
+
+    trait Temp {
+      def i(): Int
+      def j(): Integer
+    }
+    """
+  } applyRefactoring organizeWithTypicalParams
+
+  @Test
+  def testForEnsimePr1289Ex2() = new FileSet {
+    """
+    /*<-*/
+    package test
+
+    import scala._
+    import java.lang.Integer
+    import scala.Int
+    import java._
+
+    trait Temp {
+      def i(): Int
+      def j(): Integer
+    }
+    """ becomes
+    """
+    /*<-*/
+    package test
+
+    trait Temp {
+      def i(): Int
+      def j(): Integer
+    }
+    """
+  } applyRefactoring organizeCustomized(
+      groupPkgs = List("java", "scala"),
+      sortImports = true,
+      sortImportSelectors = true,
+      collapseImports = true,
+      simplifyWildcards = true,
+      removeDuplicates = true)
 }
