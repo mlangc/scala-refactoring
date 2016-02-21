@@ -3330,6 +3330,7 @@ class Blubb
     """ -> TaggedAsGlobalRename
   } prepareAndApplyRefactoring(prepareAndRenameTo("ups"))
 
+  @Ignore
   @Test
   def testRenameWithNamedArgs1002501Ex3() = new FileSet {
     """
