@@ -26,7 +26,7 @@ import scala.tools.refactoring.util.SourceWithMarker.Movements
  * A collection of implicit conversions for ASTs and other
  * helper functions that work on trees.
  */
-trait EnrichedTrees {
+trait EnrichedTrees extends TracingImpl {
 
   enrichedTrees: CompilerAccess =>
 
@@ -1026,7 +1026,7 @@ trait EnrichedTrees {
 
   object ApplyExtractor {
 
-    def couldHaveDefaultArguments(t: Tree) = t match {
+    def mightHaveNamedArguments(t: Tree) = t match {
       case _: ApplyImplicitView => false
 
       case Apply(qualifier, args) =>
@@ -1047,6 +1047,7 @@ trait EnrichedTrees {
           !isSetter &&
           !isVarArgsCall &&
           args.exists(_.pos.isRange)
+
       case _ => false
     }
 
@@ -1054,7 +1055,7 @@ trait EnrichedTrees {
 
     private def extract: Apply => Option[(Tree, List[Tree])] = {
 
-      case t @ Apply(qualifier, args) if couldHaveDefaultArguments(t) =>
+      case t @ Apply(qualifier, args) if mightHaveNamedArguments(t) =>
 
         val declaredParameterSyms = qualifier.tpe.params
 
@@ -1178,9 +1179,9 @@ trait EnrichedTrees {
           else
             t.stats ::: t.expr :: Nil
 
-          val fixedTrees = removeCompilerTreesForMultipleAssignment(trees)
+          val fixedTrees = removeCompilerTreesForMultipleAssignment(trees).filter(keepTree)
 
-          Some(fixedTrees filter keepTree)
+          Some(fixedTrees)
 
         case t => Some(List(t))
       }
