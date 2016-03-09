@@ -6,6 +6,7 @@ import scala.collection.immutable.SortedMap
 import scala.language.implicitConversions
 import scala.reflect.internal.util.RangePosition
 import scala.collection.SeqView
+import scala.reflect.internal.util.OffsetPosition
 
 /**
  * Represents source code with a movable marker.
@@ -25,8 +26,11 @@ final case class SourceWithMarker(source: IndexedSeq[Char] = IndexedSeq(), marke
   }
 
   def applyMovement(movement: SimpleMovement): Option[SourceWithMarker] = {
-    if (isDepleted) None
-    else movement(this).map(m => copy(marker = m))
+    if (isDepleted) {
+      None
+    } else {
+      movement(this).map(m => copy(marker = m)).orElse(None)
+    }
   }
 
   def withMarkerAtLastChar: SourceWithMarker = {
@@ -48,6 +52,13 @@ final case class SourceWithMarker(source: IndexedSeq[Char] = IndexedSeq(), marke
     !isInRange(marker)
   }
 
+  def step(forward: Boolean): SourceWithMarker = {
+    val delta = if (forward) 1 else -1
+    copy(marker = marker + delta)
+  }
+
+  def stepForward: SourceWithMarker = step(true)
+
   def length = source.length
 
   override def toString = {
@@ -55,7 +66,7 @@ final case class SourceWithMarker(source: IndexedSeq[Char] = IndexedSeq(), marke
       chars.mkString("").replace("\r\n", "\\r\\n").replace("\n", "\\n")
     }
 
-    val lrChars = 3
+    val lrChars = 10
     val nChars = lrChars*2 + 1
 
     def leftDots = if (marker - lrChars > 0) "..." else ""
@@ -100,6 +111,10 @@ object SourceWithMarker {
 
   def atEndOf(pos: RangePosition): SourceWithMarker = {
     SourceWithMarker(pos.source.content, pos.end + 1)
+  }
+
+  def atPoint(pos: OffsetPosition): SourceWithMarker = {
+    SourceWithMarker(pos.source.content, pos.point)
   }
 
   /**
@@ -243,7 +258,15 @@ object SourceWithMarker {
       if (forward) {
         SimpleMovementHelpers.sequence(self, other)(sourceWithMarker)
       } else {
-       other.backward.apply(sourceWithMarker).map(newMarker => sourceWithMarker.copy(marker = newMarker)).flatMap(self.backward.apply)
+        val posAfterCurrent = sourceWithMarker.marker + 1
+        val truncatedSource = sourceWithMarker.copy(source = sourceWithMarker.source.indexedView(0, posAfterCurrent))
+
+        0.to(sourceWithMarker.marker).find { startPos =>
+          SimpleMovementHelpers.sequence(self, other)(truncatedSource.copy(marker = startPos)) match {
+            case Some(m) => m == posAfterCurrent
+            case None => false
+          }
+        }.map(_ - 1)
       }
     }
 
@@ -257,7 +280,12 @@ object SourceWithMarker {
       SimpleMovementHelpers.repeat(mvnt)(sourceWithMarker)
     }
 
-    final override def atLeastOnce: Movement = this ~ this.zeroOrMore
+    final override def atLeastOnce: Movement = Movement.ifNotDepleted { (sourceWithMarker, forward) =>
+      val mvnt = if (forward) self else self.backward
+      sourceWithMarker.applyMovement(mvnt).flatMap { sourceWithMarker =>
+        SimpleMovementHelpers.repeat(mvnt)(sourceWithMarker)
+      }
+    }
 
     final override def nTimes(n: Int) = Movement { (sourceWithMarker, forward) =>
       val mvnt = if  (forward) self else self.backward
@@ -426,28 +454,36 @@ object SourceWithMarker {
     }
 
     def inBrackets(open: Char, close: Char) = Movement.ifNotDepleted { (sourceWithMarker, forward) =>
-      val (br1, br2) = if (forward) (open, close) else (close, open)
-      if (sourceWithMarker.isDepleted || sourceWithMarker.current != br1) {
+      val br1 = if (forward) open else close
+
+      if (sourceWithMarker.current != br1) {
         None
       } else {
-        val eventuallyReversedCommentsAndSpaces = {
-          if (forward) commentsAndSpaces
-          else commentsAndSpaces.backward
+        val toNextBr = {
+          val toNextBr = until(character(open) | close, skipping = comment)
+
+          if (forward) toNextBr
+          else toNextBr.backward
         }
 
         @tailrec
-        def go(m: Int): Option[Int] = {
-          val mm = sourceWithMarker.copy(marker = m).moveMarker(eventuallyReversedCommentsAndSpaces).marker
-          if (wouldBeDepleted(mm, sourceWithMarker)) {
-            None
-          } else {
-            val nm = if (mm == m) nextMarker(mm, forward) else mm
-            if(sourceWithMarker.source(nm) == br2) Some(nextMarker(nm, forward))
-            else go(nm)
+        def go(sourceWithMarker: SourceWithMarker = sourceWithMarker.step(forward), level: Int = 1): Option[Int] = {
+          sourceWithMarker.applyMovement(toNextBr) match {
+            case Some(srcAtBr) =>
+              val newLevel = {
+                if (srcAtBr.current == br1) level + 1
+                else level - 1
+              }
+
+              if (newLevel == 0) Some(nextMarker(srcAtBr.marker, forward))
+              else go(srcAtBr.step(forward), newLevel)
+
+            case None => None
           }
+
         }
 
-        go(nextMarker(sourceWithMarker.marker, forward))
+        go()
       }
     }
 
@@ -467,17 +503,25 @@ object SourceWithMarker {
      * will leave the marker at ''0'', since ''digit.zeroOrMore'' will consume the entire string,
      * after matching ''5'' against ''0'' has failed.
      */
-    def until(mvnt: SimpleMovement, skipping: SimpleMovement = none) = SimpleMovement { sourceWithMarker =>
+    def until(mvnt: Movement, skipping: Movement = none) = Movement.ifNotDepleted { (sourceWithMarker, forward) =>
+      val (actualMvnt, actualSkipping) = {
+        if (forward) (mvnt, skipping)
+        else (mvnt.backward, skipping.backward)
+      }
+
       @tailrec
       def go(sourceWithMarker: SourceWithMarker = sourceWithMarker): Option[Int] = {
-        mvnt(sourceWithMarker) match {
+        actualMvnt(sourceWithMarker) match {
           case Some(_) => Some(sourceWithMarker.marker)
           case _ =>
             if (sourceWithMarker.isDepleted) {
               None
             } else {
-              val newMarker = skipping(sourceWithMarker).getOrElse(sourceWithMarker.marker + 1)
-              go(sourceWithMarker.copy(marker = newMarker))
+              val newSourceWithMarker = sourceWithMarker.applyMovement(actualSkipping).getOrElse {
+                sourceWithMarker.step(forward)
+              }
+
+              go(newSourceWithMarker)
             }
         }
       }
@@ -559,8 +603,8 @@ object SourceWithMarker {
     val id = (plainid | literalIdentifier).butNot(reservedName)
 
     val spaces: Movement = space.zeroOrMore
-    val comments: Movement = (comment ~ spaces).zeroOrMore
-    val commentsAndSpaces: Movement = (spaces ~ comments).zeroOrMore
+    val comments: Movement = comment.zeroOrMore
+    val commentsAndSpaces: Movement = (comments ~ spaces).zeroOrMore
     val bracketsWithContents = inBrackets('[', ']')
     val curlyBracesWithContents = inBrackets('{', '}')
 

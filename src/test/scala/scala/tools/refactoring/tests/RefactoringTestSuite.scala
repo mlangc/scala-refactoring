@@ -11,6 +11,7 @@ import sourcegen._
 import transformation._
 import util._
 import scala.tools.refactoring.implementations.OrganizeImportsAlgosTest
+import scala.tools.refactoring.util.IndexedSeqOpsTest
 
 @RunWith(value = classOf[Suite])
 @Suite.SuiteClasses(value = Array(
@@ -75,5 +76,7 @@ import scala.tools.refactoring.implementations.OrganizeImportsAlgosTest
     classOf[UnionFindInitTest],
     classOf[UnionFindTest],
     classOf[UnusedImportsFinderTest],
+    classOf[IndexedSeqOpsTest],
+    classOf[SourceWithMarkerTest],
     classOf[OrganizeImportsAlgosTest]))
 class RefactoringTestSuite {}
