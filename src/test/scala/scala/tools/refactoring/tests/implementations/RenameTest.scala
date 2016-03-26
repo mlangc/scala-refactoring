@@ -3752,4 +3752,33 @@ class Blubb
     class SomeClass protected (/*(*/ups/*)*/: Int)
     """ -> TaggedAsGlobalRename
   } prepareAndApplyRefactoring(prepareAndRenameTo("ups"))
+
+  /*
+   * See https://github.com/ensime/ensime-sublime/issues/108#issuecomment-201531324
+   */
+  @Test
+  def testRenameWithExampleFromMgttlinger() = new FileSet {
+    """
+    object Main extends App {
+      def a = 'a'
+
+      def /*(*/test/*)*/ = 7
+
+      println(test)
+
+      println("works")
+    }
+    """ becomes
+    """
+    object Main extends App {
+      def a = 'a'
+
+      def /*(*/fred/*)*/ = 7
+
+      println(fred)
+
+      println("works")
+    }
+    """ -> TaggedAsGlobalRename
+  } prepareAndApplyRefactoring(prepareAndRenameTo("fred"))
 }
