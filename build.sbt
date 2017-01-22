@@ -20,6 +20,8 @@ libraryDependencies ++= (CrossVersion.partialVersion(scalaVersion.value) match {
   case _             => Nil
 })
 
+//javaOptions += "-agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=y"
+
 scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
   case Some((2, v)) if v == 11 || v == 12 => Seq(
     "-deprecation:false",

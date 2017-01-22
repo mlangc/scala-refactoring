@@ -6,5 +6,5 @@ package object common {
    *
    * Use [[SilentTracing]] for production; consider [[DebugTracing]] for debugging.
    */
-  type TracingImpl = SilentTracing
+  type TracingImpl = DebugTracing
 }

@@ -553,8 +553,14 @@ trait PrettyPrinter extends TreePrintingTraversals with AbstractPrinter {
       //mods.annotations map traverse
       val mods_ = {
         val existingMods = mods map (m => m.nameString + " ") mkString ""
-        if (!tree.symbol.isMutable && needsKeyword(tree) && !existingMods.contains("val")) {
-          existingMods + "val "
+        if (needsKeyword(tree)) {
+          if (!tree.symbol.isMutable && !existingMods.contains("val")) {
+            existingMods + "val "
+          } else if (tree.symbol.isMutable && !existingMods.contains("var")) {
+            existingMods + "var "
+          } else {
+            existingMods
+          }
         } else {
           existingMods
         }

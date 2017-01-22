@@ -369,7 +369,7 @@ trait EnrichedTrees extends TracingImpl {
     }
   }
 
-  implicit def additionalTreeMethodsForPositions(t: Tree) = new TreeMethodsForPositions(t)
+  implicit def additionalTreeMethodsForPositions(t: Tree): TreeMethodsForPositions = new TreeMethodsForPositions(t)
 
   /**
    * Trees that reach the end of the file don't seem to have the correct end position,
@@ -557,7 +557,7 @@ trait EnrichedTrees extends TracingImpl {
     }
   }
 
-  implicit def additionalTemplateMethods(t: Template) = new TemplateMethods(t)
+  implicit def additionalTemplateMethods(t: Template): TemplateMethods = new TemplateMethods(t)
 
   /**
    * Provides a finer-grained extractor for Template that distinguishes
@@ -897,6 +897,17 @@ trait EnrichedTrees extends TracingImpl {
 
     def unapply(m: global.Modifiers): Option[List[ModifierTree]] = {
       val sortedMods = sortModifiers(m.positions.toList)
+
+      trace {
+        val flags = {
+          val tmp = m.flagString
+          if (tmp == "") "<none>" else tmp
+        }
+
+        (s"flags: $flags")
+      }
+
+      trace(s"sortedMods: ${m.positions.mapValues(p => PositionDebugging.format(p))}")
 
       Some(sortedMods flatMap {
         // hack to get rid of override modifiers
